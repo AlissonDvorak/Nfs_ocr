@@ -110,6 +110,10 @@ class GoogleDriveManager:
     def _get_or_create_folder(self, folder_name: str, parent_id: str = None) -> str:
         """Obtém ou cria uma pasta no Google Drive"""
         try:
+            # Se não especificou pai, usar explicitamente 'root' para garantir visibilidade
+            if parent_id is None:
+                parent_id = 'root'
+            
             # Procurar pasta existente
             query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'"
             if parent_id:
@@ -135,6 +139,11 @@ class GoogleDriveManager:
             folder_id = folder.get('id')
             
             logger.info(f"Pasta '{folder_name}' criada: {folder_id}")
+            
+            # Para a pasta raiz, garantir que está visível
+            if folder_name == settings.GOOGLE_DRIVE_ROOT_FOLDER_NAME and parent_id == 'root':
+                logger.info(f"Pasta raiz '{folder_name}' criada no Meu Drive para máxima visibilidade")
+            
             return folder_id
             
         except HttpError as e:

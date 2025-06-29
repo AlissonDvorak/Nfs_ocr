@@ -527,11 +527,52 @@ class TelegramOCRBot:
             message += "\n"
         
         # Status do salvamento
+        message += "💾 *Status do Salvamento:*\n"
+        
         if sheets_data.get("sheets_updated"):
-            message += "💾 *Dados salvos no Google Sheets!*\n"
             updated_sheets = sheets_data.get("sheets_updated", [])
             if updated_sheets:
-                message += f"• Planilhas atualizadas: {', '.join(updated_sheets)}\n"
+                message += f"• ✅ Planilhas: {', '.join(updated_sheets)}\n"
+            else:
+                message += "• ✅ Google Sheets atualizado\n"
+        else:
+            message += "• ❌ Erro ao salvar no Google Sheets\n"
+        
+        # Informações do Google Drive
+        drive_data = result.get("drive_result", {})
+        if drive_data:
+            if drive_data.get("success"):
+                storage_type = drive_data.get("storage_type", "unknown")
+                if storage_type == "google_drive":
+                    message += "• ✅ Google Drive: Arquivo salvo\n"
+                    if drive_data.get("full_path"):
+                        # Mostrar apenas o caminho sem o ID da pasta
+                        path_parts = drive_data["full_path"].split("/")
+                        short_path = "/".join(path_parts[-3:]) if len(path_parts) > 3 else drive_data["full_path"]
+                        message += f"  📁 {short_path}\n"
+                    
+                    # Adicionar link direto se disponível
+                    if drive_data.get("file_url"):
+                        message += f"  🔗 [Ver arquivo]({drive_data['file_url']})\n"
+                    elif drive_data.get("folder_url"):
+                        message += f"  📂 [Ver pasta]({drive_data['folder_url']})\n"
+                    else:
+                        # Link genérico para a pasta NFEs
+                        message += f"  📂 [Ver no Drive](https://drive.google.com/drive/folders/1Ay56zbV7cKRANEakoNnPpBcJZq9YsfaE)\n"
+                        
+                elif storage_type == "local":
+                    message += "• ✅ Armazenamento local: Arquivo salvo\n"
+                    if drive_data.get("full_path"):
+                        message += f"  📁 {drive_data['full_path']}\n"
+                else:
+                    message += "• ✅ Arquivo salvo com sucesso\n"
+            else:
+                message += "• ❌ Erro ao salvar arquivo\n"
+                if drive_data.get("error"):
+                    error_msg = str(drive_data["error"])[:50]
+                    message += f"  ⚠️ {error_msg}...\n"
+        else:
+            message += "• ❓ Status do arquivo não disponível\n"
         
         # Tempo de processamento
         processing_time = result.get("processing_time_seconds", 0)
