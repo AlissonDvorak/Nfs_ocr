@@ -1,0 +1,16 @@
+# Google Credentials
+credentials.json
+*.json.key
+service-account-*.json
+.env
+oauth_credentials.json
+token.json
+
+# Test files and logs
+*.log
+test_*.json
+/tests/test_images/
+/tests/temp/
+nfes_storage/
+examples/
+**.pyc

@@ -1,0 +1,11 @@
+# Dependências do Bot do Telegram para OCR de Notas Fiscais
+
+# Bot do Telegram
+python-telegram-bot==20.8
+aiohttp==3.9.1
+
+# Utilitários
+python-dotenv==1.0.0
+
+# Logging e debugging
+coloredlogs==15.0.1
