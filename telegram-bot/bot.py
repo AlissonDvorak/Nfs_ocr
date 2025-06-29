@@ -220,14 +220,88 @@ class TelegramOCRBot:
         query = update.callback_query
         await query.answer()
         
+        # Criar um update fictício para usar com os comandos
+        # Isso é necessário porque callback queries não têm message diretamente
         if query.data == "stats":
-            await self.stats_command(update, context)
+            await self._handle_stats_callback(query, context)
         elif query.data == "recent":
-            await self.recent_command(update, context)
+            await self._handle_recent_callback(query, context)
         elif query.data == "health":
-            await self.health_command(update, context)
+            await self._handle_health_callback(query, context)
         elif query.data == "help":
-            await self.help_command(update, context)
+            await self._handle_help_callback(query, context)
+    
+    async def _handle_stats_callback(self, query, context):
+        """Handler para callback de estatísticas"""
+        try:
+            stats = await self._get_api_stats()
+            if stats:
+                stats_message = self._format_stats_message(stats)
+                await query.edit_message_text(stats_message, parse_mode=ParseMode.MARKDOWN)
+            else:
+                await query.edit_message_text("❌ Erro ao obter estatísticas da API")
+        except Exception as e:
+            logger.error(f"Erro no callback stats: {e}")
+            await query.edit_message_text("❌ Erro interno ao obter estatísticas")
+    
+    async def _handle_recent_callback(self, query, context):
+        """Handler para callback de dados recentes"""
+        try:
+            recent_data = await self._get_recent_entries()
+            if recent_data:
+                recent_message = self._format_recent_message(recent_data)
+                await query.edit_message_text(recent_message, parse_mode=ParseMode.MARKDOWN)
+            else:
+                await query.edit_message_text("❌ Erro ao obter dados recentes da API")
+        except Exception as e:
+            logger.error(f"Erro no callback recent: {e}")
+            await query.edit_message_text("❌ Erro interno ao obter dados recentes")
+    
+    async def _handle_health_callback(self, query, context):
+        """Handler para callback de status"""
+        try:
+            health = await self._get_api_health()
+            if health:
+                health_message = self._format_health_message(health)
+                await query.edit_message_text(health_message, parse_mode=ParseMode.MARKDOWN)
+            else:
+                await query.edit_message_text("❌ Serviço indisponível")
+        except Exception as e:
+            logger.error(f"Erro no callback health: {e}")
+            await query.edit_message_text("❌ Erro ao verificar status do serviço")
+    
+    async def _handle_help_callback(self, query, context):
+        """Handler para callback de ajuda"""
+        help_message = (
+            "📚 *Ajuda - Bot OCR Notas Fiscais*\n\n"
+            "🖼️ *Formatos suportados:*\n"
+            "• Imagens: JPG, PNG\n"
+            "• Documentos: PDF\n"
+            "• Tamanho máximo: 10MB\n\n"
+            "⚡ *Processo:*\n"
+            "1. Envie a imagem/PDF\n"
+            "2. Aguarde o processamento (5-30s)\n"
+            "3. Receba os dados extraídos\n"
+            "4. Dados são salvos automaticamente\n\n"
+            "📊 *Dados extraídos:*\n"
+            "• Número e série da NF\n"
+            "• Datas de emissão/vencimento\n"
+            "• Dados do emissor e destinatário\n"
+            "• Valores (total, impostos, etc.)\n"
+            "• Lista completa de itens\n"
+            "• Chave de acesso\n\n"
+            "🔧 *Comandos:*\n"
+            "/start - Tela inicial\n"
+            "/stats - Ver estatísticas\n"
+            "/recent - Últimas 5 NFs\n"
+            "/health - Status da API\n\n"
+            "❓ *Problemas?*\n"
+            "Se a imagem não for processada:\n"
+            "• Verifique se está legível\n"
+            "• Tente uma foto melhor\n"
+            "• Contate o suporte"
+        )
+        await query.edit_message_text(help_message, parse_mode=ParseMode.MARKDOWN)
     
     async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Processa fotos enviadas pelos usuários"""
@@ -359,11 +433,17 @@ class TelegramOCRBot:
     async def _get_api_health(self) -> Optional[Dict[str, Any]]:
         """Obtém status da API"""
         try:
-            async with aiohttp.ClientSession() as session:
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(f"{self.api_base_url}/nota-fiscal/health") as response:
                     if response.status == 200:
                         return await response.json()
-                    return None
+                    else:
+                        logger.warning(f"API health retornou status {response.status}")
+                        return None
+        except asyncio.TimeoutError:
+            logger.error("Timeout ao obter health da API")
+            return None
         except Exception as e:
             logger.error(f"Erro ao obter health: {e}")
             return None
@@ -371,11 +451,17 @@ class TelegramOCRBot:
     async def _get_api_stats(self) -> Optional[Dict[str, Any]]:
         """Obtém estatísticas da API"""
         try:
-            async with aiohttp.ClientSession() as session:
+            timeout = aiohttp.ClientTimeout(total=15)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(f"{self.api_base_url}/nota-fiscal/sheets/statistics") as response:
                     if response.status == 200:
                         return await response.json()
-                    return None
+                    else:
+                        logger.warning(f"API stats retornou status {response.status}")
+                        return None
+        except asyncio.TimeoutError:
+            logger.error("Timeout ao obter stats da API")
+            return None
         except Exception as e:
             logger.error(f"Erro ao obter stats: {e}")
             return None
@@ -383,11 +469,17 @@ class TelegramOCRBot:
     async def _get_recent_entries(self) -> Optional[Dict[str, Any]]:
         """Obtém entradas recentes da API"""
         try:
-            async with aiohttp.ClientSession() as session:
+            timeout = aiohttp.ClientTimeout(total=15)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(f"{self.api_base_url}/nota-fiscal/sheets/recent?limit=5") as response:
                     if response.status == 200:
                         return await response.json()
-                    return None
+                    else:
+                        logger.warning(f"API recent retornou status {response.status}")
+                        return None
+        except asyncio.TimeoutError:
+            logger.error("Timeout ao obter dados recentes da API")
+            return None
         except Exception as e:
             logger.error(f"Erro ao obter dados recentes: {e}")
             return None
@@ -450,6 +542,7 @@ class TelegramOCRBot:
     def _format_health_message(self, health: Dict[str, Any]) -> str:
         """Formata mensagem de status da API"""
         status = health.get("overall_status", "unknown")
+        timestamp = health.get("timestamp", "N/A")
         
         if status == "healthy":
             emoji = "✅"
@@ -468,69 +561,148 @@ class TelegramOCRBot:
         # Status dos serviços
         message += "🔧 *Componentes:*\n"
         
-        ocr_status = services.get("ocr_gemini", {}).get("status", "unknown")
-        sheets_status = services.get("google_sheets", {}).get("status", "unknown")
+        # OCR Gemini
+        ocr_service = services.get("ocr_gemini", {})
+        ocr_status = ocr_service.get("status", "unknown")
+        ocr_emoji = "✅" if ocr_status == "healthy" else "❌"
+        message += f"• OCR (Gemini): {ocr_emoji}\n"
         
-        message += f"• OCR (Gemini): {'✅' if ocr_status == 'healthy' else '❌'}\n"
-        message += f"• Google Sheets: {'✅' if sheets_status == 'healthy' else '❌'}\n\n"
+        if ocr_service.get("model"):
+            message += f"  - Modelo: {ocr_service['model']}\n"
+        if ocr_service.get("available_models"):
+            message += f"  - Modelos disponíveis: {ocr_service['available_models']}\n"
+        
+        # Google Sheets
+        sheets_service = services.get("google_sheets", {})
+        sheets_status = sheets_service.get("status", "unknown")
+        sheets_emoji = "✅" if sheets_status == "healthy" else "❌"
+        message += f"• Google Sheets: {sheets_emoji}\n"
+        
+        # Informações das planilhas
+        if sheets_service.get("connected"):
+            spreadsheet = sheets_service.get("spreadsheet", {})
+            if spreadsheet:
+                message += f"  - Planilha: {spreadsheet.get('title', 'N/A')}\n"
+                
+            worksheets = sheets_service.get("worksheets", [])
+            if worksheets:
+                message += f"  - Abas: {len(worksheets)}\n"
+        
+        message += "\n"
         
         # Configurações
         config = health.get("configuration", {})
-        message += "⚙️ *Configuração:*\n"
-        message += f"• Modelo: {config.get('gemini_model', 'N/A')}\n"
-        message += f"• Tamanho máx: {config.get('max_file_size_mb', 'N/A')}MB\n"
+        if config:
+            message += "⚙️ *Configuração:*\n"
+            message += f"• Modelo: {config.get('gemini_model', 'N/A')}\n"
+            message += f"• Tamanho máx: {config.get('max_file_size_mb', 'N/A')}MB\n"
+            
+            extensions = config.get('allowed_extensions', [])
+            if extensions:
+                message += f"• Formatos: {', '.join(extensions)}\n"
+        
+        # Timestamp
+        if timestamp != "N/A":
+            try:
+                from datetime import datetime
+                # Tentar converter timestamp
+                if "T" in timestamp:
+                    dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                    formatted_time = dt.strftime("%d/%m/%Y %H:%M:%S")
+                    message += f"\n🕐 Atualizado em: {formatted_time}"
+            except:
+                message += f"\n🕐 Timestamp: {timestamp}"
         
         return message
     
     def _format_stats_message(self, stats: Dict[str, Any]) -> str:
         """Formata mensagem de estatísticas"""
+        message = "📊 *Estatísticas do Serviço*\n\n"
+        
+        # Verificar se temos dados de statistics
         stats_data = stats.get("statistics", {})
         
-        message = "📊 *Estatísticas do Serviço*\n\n"
+        if not stats_data:
+            # Tentar obter dados direto do response
+            stats_data = stats
         
         # Resumo
         resumo = stats_data.get("resumo", {})
-        message += "📋 *Notas Fiscais:*\n"
-        message += f"• Total processadas: {resumo.get('total_notas', 0)}\n"
-        message += f"• Valor total: R$ {resumo.get('valor_total_sum', 0):,.2f}\n"
+        if resumo:
+            message += "📋 *Notas Fiscais:*\n"
+            message += f"• Total processadas: {resumo.get('total_notas', 0)}\n"
+            
+            valor_total = resumo.get('valor_total_sum', 0)
+            if isinstance(valor_total, (int, float)):
+                message += f"• Valor total: R$ {valor_total:,.2f}\n"
+            else:
+                message += f"• Valor total: R$ {valor_total}\n"
+            
+            if resumo.get('last_processed'):
+                message += f"• Última: {resumo['last_processed']}\n"
+            message += "\n"
         
-        if resumo.get('last_processed'):
-            message += f"• Última: {resumo['last_processed']}\n"
-        message += "\n"
-        
-        # Itens
+        # Itens  
         itens = stats_data.get("itens", {})
-        message += "📦 *Itens:*\n"
-        message += f"• Total de itens: {itens.get('total_itens', 0)}\n"
-        message += "\n"
+        if itens:
+            message += "📦 *Itens:*\n"
+            message += f"• Total de itens: {itens.get('total_itens', 0)}\n"
+            message += "\n"
         
         # Empresas
         cnpj_count = stats_data.get("cnpj_worksheets", 0)
-        message += f"🏢 *Empresas ativas:* {cnpj_count}\n"
+        if cnpj_count > 0:
+            message += f"🏢 *Empresas ativas:* {cnpj_count}\n"
+            
+            empresas = stats_data.get("empresas_ativas", [])
+            if empresas:
+                if len(empresas) <= 3:
+                    message += f"• {', '.join(empresas)}\n"
+                else:
+                    message += f"• {', '.join(empresas[:3])} e mais {len(empresas) - 3}\n"
         
-        empresas = stats_data.get("empresas_ativas", [])
-        if empresas:
-            message += f"• {', '.join(empresas[:3])}"
-            if len(empresas) > 3:
-                message += f" e mais {len(empresas) - 3}"
+        # Se não temos dados específicos, mostrar informações gerais
+        if not resumo and not itens and cnpj_count == 0:
+            message += "📊 *Informações Disponíveis:*\n"
+            
+            # Verificar se há dados no Google Sheets
+            google_sheets = stats.get("google_sheets", {})
+            if google_sheets:
+                worksheets = google_sheets.get("worksheets", [])
+                message += f"• Planilhas ativas: {len(worksheets)}\n"
+                
+                for ws in worksheets[:3]:
+                    if isinstance(ws, dict):
+                        title = ws.get("title", "N/A")
+                        rows = ws.get("rows", 0)
+                        message += f"  - {title}: {rows} linhas\n"
+            
+            message += "\n💡 Execute o comando novamente para dados atualizados"
         
         return message
     
     def _format_recent_message(self, recent: Dict[str, Any]) -> str:
         """Formata mensagem de dados recentes"""
-        data = recent.get("data", {})
-        resumo_data = data.get("resumo", [])
+        # Verificar se recent é uma lista ou dict
+        if isinstance(recent, list):
+            recent_data = recent
+        else:
+            data = recent.get("data", {})
+            recent_data = data.get("resumo", []) if isinstance(data, dict) else recent.get("resumo", [])
         
-        if not resumo_data:
+        if not recent_data:
             return "📋 Nenhuma nota fiscal encontrada recentemente"
         
-        message = f"🔍 *Últimas {len(resumo_data)} Notas Fiscais:*\n\n"
+        message = f"🔍 *Últimas {len(recent_data)} Notas Fiscais:*\n\n"
         
-        for i, nf in enumerate(resumo_data, 1):
-            message += f"{i}. *NF {nf.get('Número Nota', 'N/A')}*\n"
-            message += f"   • Emissor: {nf.get('Razão Social Emissor', 'N/A')[:30]}...\n"
-            message += f"   • Valor: R$ {nf.get('Valor Total', 'N/A')}\n"
-            message += f"   • Data: {nf.get('Data Emissão', 'N/A')}\n\n"
+        for i, nf in enumerate(recent_data, 1):
+            if isinstance(nf, dict):
+                message += f"{i}. *NF {nf.get('Número Nota', nf.get('numero_nota', 'N/A'))}*\n"
+                message += f"   • Emissor: {nf.get('Razão Social Emissor', nf.get('razao_social_emissor', 'N/A'))[:30]}...\n"
+                message += f"   • Valor: R$ {nf.get('Valor Total', nf.get('valor_total', 'N/A'))}\n"
+                message += f"   • Data: {nf.get('Data Emissão', nf.get('data_emissao', 'N/A'))}\n\n"
+            else:
+                message += f"{i}. Registro: {str(nf)[:50]}...\n\n"
         
         return message
     
